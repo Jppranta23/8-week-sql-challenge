@@ -1,0 +1,198 @@
+-- 1
+SELECT 
+	s.customer_id,
+    sum(m.price) as Total_Amount
+FROM dannys_diner.menu m inner join dannys_diner.sales s
+on m.product_id=s.product_id
+GROUP BY s.customer_id;
+
+--2
+SELECT
+	customer_id,
+    count(distinct order_date) as Days_visited
+from dannys_diner.sales
+GROUP BY customer_id;
+
+--3
+WITH ranked_sales AS (
+    SELECT
+        s.customer_id,
+        m.product_name,
+        ROW_NUMBER() OVER (
+            PARTITION BY s.customer_id 
+            ORDER BY s.order_date
+        ) AS rn
+    FROM dannys_diner.menu m
+    INNER JOIN dannys_diner.sales s
+        ON m.product_id = s.product_id
+)
+
+SELECT 
+	customer_id,
+    product_name
+FROM ranked_sales
+WHERE rn=1;
+
+--4
+SELECT
+	m.product_name,
+    count(m.product_name) as COUNT
+FROM dannys_diner.menu m inner join dannys_diner.sales s
+on m.product_id=s.product_id
+GROUP BY m.product_name
+ORDER BY COUNT desc
+LIMIT 1;
+
+
+--5
+WITH customer_purchase AS(
+	SELECT 
+  		s.customer_id,
+  		m.product_name, 
+  		count(m.product_name)as Freq
+  	FROM dannys_diner.menu m
+    INNER JOIN dannys_diner.sales s
+        ON m.product_id = s.product_id
+  	GROUP BY s.customer_id,m.product_name),
+    
+ranked_sales AS (
+    SELECT
+        customer_id,
+        product_name,
+        ROW_NUMBER() OVER (
+            PARTITION BY customer_id 
+            ORDER BY Freq desc
+        ) AS rn
+   FROM customer_purchase
+)
+
+SELECT 
+	customer_id,
+    product_name
+FROM ranked_sales
+WHERE rn=1;
+
+--6
+WITH ranked AS (
+  SELECT 
+  	s.customer_id,
+  	m.product_name,
+  	ROW_NUMBER() OVER
+  	(PARTITION BY s.customer_id
+     ORDER BY s.order_date) as rn
+ FROM dannys_diner.menu m
+   INNER JOIN dannys_diner.sales s
+       ON m.product_id = s.product_id
+  INNER JOIN dannys_diner.members mem
+      ON s.customer_id = mem.customer_id
+  where s.order_date>mem.join_date
+)
+
+select 
+customer_id,
+product_name
+from ranked
+where rn=1;
+
+--7
+WITH ranked AS (
+  SELECT 
+  	s.customer_id,
+  	m.product_name,
+  	ROW_NUMBER() OVER
+  	(PARTITION BY s.customer_id
+     ORDER BY s.order_date desc) rn
+ FROM dannys_diner.menu m
+   INNER JOIN dannys_diner.sales s
+       ON m.product_id = s.product_id
+  INNER JOIN dannys_diner.members mem
+      ON s.customer_id = mem.customer_id
+  where s.order_date<mem.join_date
+)
+
+select 
+customer_id,
+product_name
+from ranked
+where rn=1;
+
+--8
+SELECT 
+	s.customer_id,
+    count(*) as total_item,
+    sum(m.price) as amount
+    FROM dannys_diner.menu m
+    INNER JOIN dannys_diner.sales s
+       ON m.product_id = s.product_id
+  INNER JOIN dannys_diner.members mem
+      ON s.customer_id = mem.customer_id
+  WHERE s.order_date<mem.join_date
+  GROUP BY s.customer_id;
+  
+  --9
+  WITH jp as (
+  SELECT 
+  	s.customer_id,
+    m.product_name,
+    sum(m.price)
+	FROM dannys_diner.menu m
+    INNER JOIN dannys_diner.sales s
+       ON m.product_id = s.product_id
+    GROUP BY s.customer_id,m.product_name),
+    
+jp2 as (
+SELECT customer_id,
+       case when product_name='sushi' then sum*20
+       else sum*10 end as points
+       from jp)
+ select
+ 	customer_id,
+    sum(points) total_points
+    from jp2
+    group by customer_id;
+    
+--10
+  WITH ac as (
+  SELECT 
+  	s.customer_id,
+    sum(m.price*20)as points
+ FROM dannys_diner.menu m
+   INNER JOIN dannys_diner.sales s
+       ON m.product_id = s.product_id
+  INNER JOIN dannys_diner.members mem
+      ON s.customer_id = mem.customer_id
+  where s.order_date <= mem.join_date + interval '6 day' and s.order_date >= mem.join_date
+  GROUP BY s.customer_id),
+  
+jp as (
+  SELECT 
+  	s.customer_id,
+    m.product_name,
+    sum(m.price)
+	FROM dannys_diner.menu m
+    INNER JOIN dannys_diner.sales s
+       ON m.product_id = s.product_id
+  	INNER JOIN dannys_diner.members mem
+  		on s.customer_id=mem.customer_id
+  where (s.order_date >mem.join_date + interval '6 day' or s.order_date < mem.join_date) AND s.order_date BETWEEN DATE '2021-01-01' AND DATE '2021-01-31'
+    GROUP BY s.customer_id,m.product_name),
+    
+jp2 as (
+SELECT customer_id,
+       case when product_name='sushi' then sum*20
+       else sum*10 end as points
+       from jp),
+jp3 as (
+ select
+ 	customer_id,
+    sum(points) points
+    from jp2
+    group by customer_id)
+    
+select
+	a.customer_id,
+    a.points+b.points as total_points
+    FROM ac a inner join jp3 b
+    on a.customer_id= b.customer_id;
+
+    
